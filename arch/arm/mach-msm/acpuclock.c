@@ -3,7 +3,7 @@
  * MSM architecture clock driver
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -16,6 +16,48 @@
  * GNU General Public License for more details.
  *
  */
+
+/*
+ * OverClock and UnderClock author: Stefano Viola aka estebanSannin
+ * email: stefanoviol [@] gmail [.] com
+ * site: http://hacklabproject.org http://dronix.org
+ *
+ * Tanks Francesco Gugliuzza aka JackTheVendicator for "Turbo Force Mode"
+ */
+
+/*
+ *
+ * For enable the frequencies uncomment the line
+ *
+ */
+
+#define UNDERCLOCK_30720
+#define UNDERCLOCK_61440
+//#define UNDERCLOCK_49152
+#define OVERCLOCK_614400
+#define OVERCLOCK_633600
+#define OVERCLOCK_652800
+#define OVERCLOCK_672000
+#define OVERCLOCK_691200
+#define OVERCLOCK_710400
+//#define OVERCLOCK_729600
+//#define OVERCLOCK_748800
+//#define OVERCLOCK_768000
+
+
+/*
+ *  ATTENTION
+ *  TURBO_MODE overclock the generic PLL (PLL_1): BUS RAM, CAM, DISPLAY
+ *  and enable new frequencies:
+ *  352mhz
+ *  528mhz
+ *
+ *  because are generated from generic PLL
+ *
+ */
+
+//#define TURBO_MODE
+
 
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -38,6 +80,7 @@
 #include "clock.h"
 #include "acpuclock.h"
 #include "socinfo.h"
+
 
 #define A11S_CLK_CNTL_ADDR (MSM_CSR_BASE + 0x100)
 #define A11S_CLK_SEL_ADDR (MSM_CSR_BASE + 0x104)
@@ -118,7 +161,7 @@ static void __init acpuclk_init(void);
 
 /* 7x01/7x25 normal with GSM capable modem */
 static struct clkctl_acpu_speed pll0_245_pll1_768_pll2_1056[] = {
-	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 30720 },
+  	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 30720 },
 #ifdef CONFIG_MSM_CPU_FREQ_UNDERCLOCK
 	{ 1, 30720, ACPU_PLL_0, 4, 7, 15360, 1, 1, 15360 },
 	{ 1, 49152, ACPU_PLL_0, 4, 4, 24576, 1, 2, 24576 },
@@ -325,7 +368,6 @@ static struct clkctl_acpu_speed pll0_960_pll1_245_pll2_1200[] = {
 #endif
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
 };
-
 /* 7x27 normal with CDMA-only modem - PLL0 and PLL1 swapped */
 static struct clkctl_acpu_speed pll0_960_pll1_196_pll2_1200[] = {
 	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 24576 },
@@ -356,6 +398,8 @@ static struct clkctl_acpu_speed pll0_960_pll1_196_pll2_1200[] = {
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
 };
 
+
+
 #define PLL_196_MHZ	10
 #define PLL_245_MHZ	12
 #define PLL_491_MHZ	25
@@ -364,9 +408,11 @@ static struct clkctl_acpu_speed pll0_960_pll1_196_pll2_1200[] = {
 #define PLL_1056_MHZ	55
 #define PLL_1200_MHZ	62
 
+
 #ifdef CONFIG_MSM_CPU_FREQ_OVERCLOCK
 unsigned long original_pll2 = PLL_1056_MHZ;
 #endif
+
 
 #define PLL_CONFIG(m0, m1, m2) { \
 	PLL_##m0##_MHZ, PLL_##m1##_MHZ, PLL_##m2##_MHZ, \
@@ -484,16 +530,14 @@ static int pc_pll_request(unsigned id, unsigned on)
  *---------------------------------------------------------------------------*/
 
 #define POWER_COLLAPSE_KHZ 19200
-unsigned long acpuclk_power_collapse(void)
-{
+unsigned long acpuclk_power_collapse(void) {
 	int ret = acpuclk_get_rate(smp_processor_id());
 	acpuclk_set_rate(smp_processor_id(), POWER_COLLAPSE_KHZ, SETRATE_PC);
 	return ret;
 }
 
 #define WAIT_FOR_IRQ_KHZ 128000
-unsigned long acpuclk_wait_for_irq(void)
-{
+unsigned long acpuclk_wait_for_irq(void) {
 	int ret = acpuclk_get_rate(smp_processor_id());
 	acpuclk_set_rate(smp_processor_id(), WAIT_FOR_IRQ_KHZ, SETRATE_SWFI);
 	return ret;
@@ -523,6 +567,8 @@ static int acpuclk_set_vdd_level(int vdd)
 /* Set proper dividers for the given clock speed. */
 static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 	uint32_t reg_clkctl, reg_clksel, clk_div, src_sel;
+	uint32_t a11_div;
+
 
 	reg_clksel = readl(A11S_CLK_SEL_ADDR);
 
@@ -530,6 +576,18 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 	clk_div = (reg_clksel >> 1) & 0x03;
 	/* CLK_SEL_SRC1NO */
 	src_sel = reg_clksel & 1;
+
+
+	a11_div=hunt_s->a11clk_src_div;
+
+	//estebanSannin OC 
+#define custom_frequency 537600
+	if(hunt_s->a11clk_khz>600000 || hunt_s->a11clk_khz==custom_frequency) {
+		a11_div=0;
+		writel(hunt_s->a11clk_khz/19200, MSM_CLK_CTL_BASE+0x33C);
+		udelay(50);
+	}
+
 
 	/*
 	 * If the new clock divider is higher than the previous, then
@@ -541,34 +599,16 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 		writel(reg_clksel, A11S_CLK_SEL_ADDR);
 	}
 
-#ifdef CONFIG_MSM_CPU_FREQ_OVERCLOCK
-        // Perform overclocking if requested
-        if(hunt_s->a11clk_khz>600000) {
-                // Change the speed of PLL2
-                writel(hunt_s->a11clk_khz/19200, PLLn_L_VAL(2));
-                udelay(50);
-        }
-#endif
-
 	/* Program clock source and divider */
 	reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
 	reg_clkctl &= ~(0xFF << (8 * src_sel));
 	reg_clkctl |= hunt_s->a11clk_src_sel << (4 + 8 * src_sel);
-	reg_clkctl |= hunt_s->a11clk_src_div << (0 + 8 * src_sel);
+	reg_clkctl |= a11_div << (0 + 8 * src_sel);
 	writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
 
 	/* Program clock source selection */
 	reg_clksel ^= 1;
 	writel(reg_clksel, A11S_CLK_SEL_ADDR);
-
-#ifdef CONFIG_MSM_CPU_FREQ_OVERCLOCK
-        // Recover from overclocking
-        if(hunt_s->a11clk_khz<=600000) {
-                // Restore the speed of PLL2
-                writel(original_pll2, PLLn_L_VAL(2));
-                udelay(50);
-        }
-#endif
 
 	/*
 	 * If the new clock divider is lower than the previous, then
@@ -829,6 +869,8 @@ uint32_t acpuclk_get_switch_time(void)
 #define REG2DIV(n)		((n)+1)
 #define SLOWER_BY(div, factor)	div = DIV2REG(REG2DIV(div) * factor)
 
+
+
 static void __init acpu_freq_tbl_fixup(void)
 {
 	unsigned long pll0_l, pll1_l, pll2_l;
@@ -839,6 +881,9 @@ static void __init acpu_freq_tbl_fixup(void)
 
 	/* Wait for the PLLs to be initialized and then read their frequency.
 	 */
+	pr_info("\nOverClock/Underclock Enabled\n\n");
+	pr_info("by Stefano Viola\n");
+	pr_info("estebanSannin\n");
 	do {
 		pll0_l = readl(PLLn_L_VAL(0)) & 0x3f;
 		cpu_relax();
@@ -857,11 +902,6 @@ static void __init acpu_freq_tbl_fixup(void)
 
 	pr_info("L val: PLL0: %d, PLL1: %d, PLL2: %d\n",
 			(int)pll0_l, (int)pll1_l, (int)pll2_l);
-
-#ifdef CONFIG_MSM_CPU_FREQ_OVERCLOCK
-	// Save pll2 for later
-	original_pll2 = pll2_l;
-#endif
 
 	/* Some configurations run PLL0 twice as fast. Instead of having
 	 * separate tables for this case, we simply fix up the ACPU clock
@@ -1053,7 +1093,15 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	precompute_stepping();
 	if (cpu_is_msm7x25())
 		msm7x25_acpu_pll_hw_bug_fix();
-	acpuclk_init();
+
+#ifdef TURBO_MODE
+	//estebanSannin and JackTheVendicator
+	printk("FORCING TURBO MODE enabled!\n");
+		writel(55, MSM_CLK_CTL_BASE+0x320);
+		udelay(50);
+#endif
+
+acpuclk_init();
 	lpj_init();
 	print_acpu_freq_tbl();
 	if (cpu_is_msm7x27())
