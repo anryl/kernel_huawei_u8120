@@ -2303,7 +2303,7 @@ static int mt9d113_i2c_probe(struct i2c_client *client,
 	//mt9d113_client->addr = mt9d113_client->addr >> 1;
 	msleep(50);
 
-	CDBG("i2c probe ok\n");
+	CDBG("camera sensor mt9d113 i2c probe ok\n");
 	return 0;
 
 probe_failure:
